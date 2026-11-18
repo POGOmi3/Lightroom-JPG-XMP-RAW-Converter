@@ -27,8 +27,12 @@ jobs:
         run: |
           $ver = (Invoke-WebRequest -Uri "https://exiftool.org/ver.txt" -UseBasicParsing).Content.Trim()
           Write-Host "ExifTool version: $ver"
-          Invoke-WebRequest -Uri "https://downloads.sourceforge.net/project/exiftool/exiftool-$($ver)_64.zip" -OutFile exiftool.zip
-          Expand-Archive exiftool.zip -DestinationPath exiftool_pkg
+          curl.exe -L -o exiftool.zip "https://downloads.sourceforge.net/project/exiftool/exiftool-$($ver)_64.zip"
+          if ($LASTEXITCODE -ne 0) { throw "curl download failed: $LASTEXITCODE" }
+          Get-Item exiftool.zip | Select-Object Name, Length
+          New-Item -ItemType Directory -Force -Path exiftool_pkg | Out-Null
+          tar.exe -xf exiftool.zip -C exiftool_pkg
+          if ($LASTEXITCODE -ne 0) { throw "tar extract failed: $LASTEXITCODE" }
           $src = Get-ChildItem exiftool_pkg -Directory | Select-Object -First 1
           New-Item -ItemType Directory -Force -Path exiftool | Out-Null
           Copy-Item (Join-Path $src.FullName "exiftool(-k).exe") (Join-Path "exiftool" "exiftool.exe")
