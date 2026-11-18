@@ -23,17 +23,30 @@ class ImageMeta:
     orig_width: int = 0
     orig_height: int = 0
     orientation: int = 1  # EXIF Orientation (1=Normal, 6=Rotate 90 CW, 8=Rotate 270 CW, etc.)
+    crop_width: int = 0   # Olympus:CropWidth (RAW有効画素幅)
+    crop_height: int = 0  # Olympus:CropHeight (RAW有効画素高)
 
     @property
     def is_valid(self) -> bool:
-        return (self.orig_width > 0 and self.orig_height > 0) or (self.width > 0 and self.height > 0)
+        return (
+            (self.orig_width > 0 and self.orig_height > 0)
+            or (self.crop_width > 0 and self.crop_height > 0)
+            or (self.width > 0 and self.height > 0)
+        )
 
     def get_effective_size(self) -> Tuple[int, int]:
-        """OriginalDefaultFinalSizeがあれば優先し、なければImageWidth/Heightを返す"""
+        """DNG用: OriginalDefaultFinalSizeがあれば優先し、なければImageWidth/Heightを返す"""
         if self.orig_width > 0 and self.orig_height > 0:
             return self.orig_width, self.orig_height
         return self.width, self.height
 
+    def get_raw_effective_size(self) -> Tuple[int, int]:
+        """RAW用: CropWidth/CropHeightがあれば優先し、なければImageWidth/Heightを返す"""
+        if self.crop_width > 0 and self.crop_height > 0:
+            return self.crop_width, self.crop_height
+        if self.width > 0 and self.height > 0:
+            return self.width, self.height
+        return self.orig_width, self.orig_height
 
 @dataclass
 class ProcessResult:
@@ -218,6 +231,14 @@ class XmpSyncCore:
         if not file_paths:
             return meta_map
 
+        def _to_int(val) -> int:
+            if isinstance(val, list):
+                val = val[0] if val else 0
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                return 0
+
         # 引数長制限を避けるため100ファイルずつチャンク実行
         chunk_size = 100
         for i in range(0, len(file_paths), chunk_size):
@@ -229,6 +250,7 @@ class XmpSyncCore:
                 "-ImageWidth", "-ImageHeight",
                 "-OriginalDefaultFinalSize",
                 "-ExifImageWidth", "-ExifImageHeight",
+                "-Olympus:CropWidth", "-Olympus:CropHeight",
                 "-Orientation",
                 *[str(p) for p in chunk]
             ]
@@ -239,9 +261,11 @@ class XmpSyncCore:
                     data_list = json.loads(proc.stdout.decode("utf-8", errors="replace"))
                     for item in data_list:
                         src = Path(item.get("SourceFile", "")).resolve()
-                        w = int(item.get("ImageWidth") or item.get("ExifImageWidth") or 0)
-                        h = int(item.get("ImageHeight") or item.get("ExifImageHeight") or 0)
-                        orient = int(item.get("Orientation") or 1)
+                        w = _to_int(item.get("ImageWidth") or item.get("ExifImageWidth"))
+                        h = _to_int(item.get("ImageHeight") or item.get("ExifImageHeight"))
+                        crop_w = _to_int(item.get("CropWidth") or item.get("Olympus:CropWidth"))
+                        crop_h = _to_int(item.get("CropHeight") or item.get("Olympus:CropHeight"))
+                        orient = _to_int(item.get("Orientation")) or 1
 
                         orig_w, orig_h = 0, 0
                         orig_str = str(item.get("OriginalDefaultFinalSize", "")).strip()
@@ -251,9 +275,13 @@ class XmpSyncCore:
                                 orig_w, orig_h = int(parts[0]), int(parts[1])
 
                         meta_map[src] = ImageMeta(
-                            width=w, height=h,
-                            orig_width=orig_w, orig_height=orig_h,
-                            orientation=orient
+                            width=w,
+                            height=h,
+                            orig_width=orig_w,
+                            orig_height=orig_h,
+                            orientation=orient,
+                            crop_width=crop_w,
+                            crop_height=crop_h,
                         )
             except Exception as e:
                 result.warnings.append(f"[メタデータ一括取得警告] {e}")
@@ -264,52 +292,45 @@ class XmpSyncCore:
         self, dng_meta: ImageMeta, orf_meta: ImageMeta
     ) -> Tuple[float, float, float, float, str]:
         """
-        DNG(JPG)とORF(RAW)の表示寸法から、X軸・Y軸それぞれの scale と offset を計算する。
-        Muse仕様に基づき、Orientationを考慮した表示寸法で比較する。
+        DNG(JPG)とORF(RAW有効エリア)の格納アスペクト比から、
+        格納空間(センサー基準)でのX軸・Y軸それぞれの scale と offset を計算する。
         """
         jpg_w, jpg_h = dng_meta.get_effective_size()
-        raw_w, raw_h = orf_meta.get_effective_size()
+        raw_w, raw_h = orf_meta.get_raw_effective_size()
 
-        # Orientation 5,6,7,8 は90度/270度回転（縦位置）
-        is_vertical = (dng_meta.orientation in (5, 6, 7, 8)) or (orf_meta.orientation in (5, 6, 7, 8))
-        if dng_meta.orig_width == 0 and jpg_w < jpg_h:
-            is_vertical = True
+        if jpg_w <= 0 or jpg_h <= 0 or raw_w <= 0 or raw_h <= 0:
+            return 1.0, 0.0, 1.0, 0.0, "寸法不正(画角補正スキップ)"
 
-        # センサー上の長辺・短辺に一度正規化（長辺=L, 短辺=S）
-        jpg_L, jpg_S = max(jpg_w, jpg_h), min(jpg_w, jpg_h)
-        raw_L, raw_S = max(raw_w, raw_h), min(raw_w, raw_h)
+        a_j = jpg_w / jpg_h
+        a_r = raw_w / raw_h
 
-        # アスペクト比の人間向けラベル判定
-        ratio = jpg_L / jpg_S if jpg_S > 0 else 1.333
-        if abs(ratio - 1.5) < 0.03:
-            aspect_name = "3:2"
-        elif abs(ratio - (16.0 / 9.0)) < 0.04:
-            aspect_name = "16:9"
-        elif abs(ratio - 1.0) < 0.03:
-            aspect_name = "1:1"
-        elif abs(ratio - (4.0 / 3.0)) < 0.03:
-            aspect_name = "4:3"
+        if abs(a_j - a_r) < 1e-9:
+            scale_x = 1.0
+            scale_y = 1.0
+        elif a_j > a_r:
+            scale_x = 1.0
+            scale_y = a_r / a_j
         else:
-            aspect_name = f"{jpg_L}:{jpg_S}"
-
-        orient_label = "縦" if is_vertical else "横"
-
-        # センサー基準での長辺スケールと短辺スケール
-        scale_L = min(1.0, jpg_L / raw_L) if raw_L > 0 else 1.0
-        scale_S = min(1.0, jpg_S / raw_S) if raw_S > 0 else 1.0
-
-        # 表示寸法ベースでのX軸(Left/Right)・Y軸(Top/Bottom)への割り当て
-        # ※縦位置で座標軸がどちらのモデル（表示基準／センサー基準）かは
-        #   実物サンプルでの実機確認が別途必要（REVIEW参照）
-        if is_vertical:
-            # 縦位置: 表示上のX軸(左右)が短辺(S)、Y軸(上下)が長辺(L)
-            scale_x, scale_y = scale_S, scale_L
-        else:
-            # 横位置: 表示上のX軸(左右)が長辺(L)、Y軸(上下)が短辺(S)
-            scale_x, scale_y = scale_L, scale_S
+            scale_x = a_j / a_r
+            scale_y = 1.0
 
         offset_x = (1.0 - scale_x) / 2.0
         offset_y = (1.0 - scale_y) / 2.0
+
+        # ログ表示用の縦横・画角ラベル判定（変換計算自体には一切関与しない）
+        is_vertical = (dng_meta.orientation in (5, 6, 7, 8)) or (orf_meta.orientation in (5, 6, 7, 8))
+        orient_label = "縦" if is_vertical else "横"
+
+        if abs(a_j - 1.5) < 0.03:
+            aspect_name = "3:2"
+        elif abs(a_j - (16.0 / 9.0)) < 0.04:
+            aspect_name = "16:9"
+        elif abs(a_j - 1.0) < 0.03:
+            aspect_name = "1:1"
+        elif abs(a_j - (4.0 / 3.0)) < 0.03:
+            aspect_name = "4:3"
+        else:
+            aspect_name = f"{jpg_w}:{jpg_h}"
 
         info_str = f"{orient_label} {aspect_name} (offX={offset_x:.4f}, offY={offset_y:.4f})"
         return scale_x, offset_x, scale_y, offset_y, info_str

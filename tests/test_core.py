@@ -102,7 +102,7 @@ check("横3:2", abs(sx - 1) < 1e-9 and abs(ox) < 1e-9 and abs(sy - 0.888889) < 1
 sx, ox, sy, oy, label = aspect(
     ImageMeta(orig_width=5184, orig_height=3456, orientation=6),
     ImageMeta(width=5184, height=3888, orientation=6))
-check("縦3:2 (表示基準モデル)", abs(sx - 0.888889) < 1e-6 and abs(ox - 0.055556) < 1e-6 and abs(sy - 1) < 1e-9, label)
+check("縦3:2 (センサー基準: 横と同じY変換)", abs(sx - 1) < 1e-9 and abs(ox) < 1e-9 and abs(sy - 0.888889) < 1e-6 and abs(oy - 0.055556) < 1e-6, label)
 
 sx, ox, sy, oy, label = aspect(
     ImageMeta(orig_width=3888, orig_height=3888, orientation=1),
@@ -112,7 +112,17 @@ check("横1:1", abs(sx - 0.75) < 1e-9 and abs(ox - 0.125) < 1e-9 and abs(sy - 1)
 sx, ox, sy, oy, label = aspect(
     ImageMeta(orig_width=3888, orig_height=3888, orientation=6),
     ImageMeta(width=5184, height=3888, orientation=6))
-check("縦1:1", abs(sx - 1) < 1e-9 and abs(sy - 0.75) < 1e-9 and abs(oy - 0.125) < 1e-9, label)
+check("縦1:1 (センサー基準: 横と同じX変換)", abs(sx - 0.75) < 1e-9 and abs(ox - 0.125) < 1e-9 and abs(sy - 1) < 1e-9, label)
+
+sx, ox, sy, oy, label = aspect(
+    ImageMeta(orig_width=5184, orig_height=3456, orientation=1),
+    ImageMeta(width=5240, height=3912, crop_width=5184, crop_height=3888, orientation=1))
+check("ORF有効エリア優先 (5240x3912ではなく5184x3888で計算)", abs(sy - 0.888889) < 1e-6 and abs(oy - 0.055556) < 1e-6, label)
+
+sx, ox, sy, oy, label = aspect(
+    ImageMeta(width=3216, height=2144, orientation=8),
+    ImageMeta(width=5240, height=3912, crop_width=5184, crop_height=3888, orientation=8))
+check("縮小版DNG (EM1X9697実物寸法, アスペクト比方式)", abs(sx - 1) < 1e-9 and abs(sy - 0.888889) < 1e-6 and abs(oy - 0.055556) < 1e-6, label)
 
 sx, ox, sy, oy, label = aspect(
     ImageMeta(orig_width=5184, orig_height=2916, orientation=1),
