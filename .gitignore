@@ -7,4 +7,5 @@ __temp_*.xmp
 *.xmp.bak_*
 dist/
 build/
-*.spec
+main_gui.spec
+exiftool/
