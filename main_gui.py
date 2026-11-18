@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont
+from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QFileDialog, QHBoxLayout, QLabel,
     QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar,
@@ -9,6 +9,252 @@ from PySide6.QtWidgets import (
 )
 
 from core import XmpSyncCore, ProcessResult
+
+
+DARK_QSS = """
+QWidget {
+    background-color: #232323;
+    color: #E6E6E6;
+    font-family: "Yu Gothic UI", "Segoe UI", sans-serif;
+    font-size: 13px;
+}
+
+QLabel, QCheckBox {
+    background-color: transparent;
+}
+
+QLabel {
+    color: #E6E6E6;
+}
+
+QLabel#statusLabel {
+    color: #9E9E9E;
+}
+
+DropAreaLabel, QLabel#dropArea {
+    background-color: #1B1B1B;
+    border: 2px dashed #4A4A4A;
+    border-radius: 10px;
+    color: #CFCFCF;
+    font-size: 13px;
+    padding: 16px;
+}
+
+DropAreaLabel:hover,
+QLabel#dropArea:hover,
+DropAreaLabel[dragOver="true"],
+QLabel#dropArea[dragOver="true"] {
+    border-color: #31A8FF;
+    background-color: #202226;
+}
+
+QGroupBox {
+    background-color: #2A2A2A;
+    border: 1px solid #3A3A3A;
+    border-radius: 8px;
+    margin-top: 14px;
+    padding: 12px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    top: 0px;
+    padding: 0px 4px;
+    color: #9E9E9E;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: transparent;
+}
+
+QLineEdit {
+    background-color: #1E1E1E;
+    color: #E6E6E6;
+    border: 1px solid #3F3F3F;
+    border-radius: 6px;
+    padding: 7px 10px;
+    selection-background-color: #31A8FF;
+    selection-color: #FFFFFF;
+}
+
+QLineEdit:focus {
+    border-color: #31A8FF;
+}
+
+QPushButton {
+    background-color: #3A3A3A;
+    color: #E6E6E6;
+    border: 1px solid #4A4A4A;
+    border-radius: 6px;
+    padding: 7px 14px;
+}
+
+QPushButton:hover {
+    background-color: #454545;
+}
+
+QPushButton:pressed {
+    background-color: #2E2E2E;
+}
+
+QPushButton:disabled {
+    background-color: #2C2C2C;
+    color: #777777;
+    border-color: #383838;
+}
+
+QPushButton#primaryButton {
+    background-color: #1473E6;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #2B85F0;
+}
+
+QPushButton#primaryButton:pressed {
+    background-color: #0D66D0;
+}
+
+QPushButton#primaryButton:disabled {
+    background-color: #33506E;
+    color: #8FA6BC;
+    border: none;
+}
+
+QMessageBox QPushButton {
+    min-width: 72px;
+}
+
+QCheckBox {
+    spacing: 8px;
+    color: #E6E6E6;
+}
+
+QCheckBox:disabled {
+    color: #6E6E6E;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #5A5A5A;
+    border-radius: 4px;
+    background-color: #1E1E1E;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #7A7A7A;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #31A8FF;
+    border-color: #31A8FF;
+}
+
+QCheckBox::indicator:checked:hover {
+    background-color: #4BB5FF;
+    border-color: #4BB5FF;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #252525;
+    border-color: #3E3E3E;
+}
+
+QCheckBox::indicator:checked:disabled {
+    background-color: #2A5A7A;
+    border-color: #2A5A7A;
+}
+
+QProgressBar {
+    background-color: #1E1E1E;
+    border: 1px solid #3A3A3A;
+    border-radius: 5px;
+    min-height: 8px;
+    max-height: 8px;
+}
+
+QProgressBar::chunk {
+    background-color: #31A8FF;
+    border-radius: 4px;
+}
+
+QPlainTextEdit {
+    background-color: #1A1A1A;
+    color: #CFCFCF;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: "Consolas", "Cascadia Mono", monospace;
+    font-size: 10pt;
+    selection-background-color: #31A8FF;
+    selection-color: #FFFFFF;
+}
+
+QAbstractScrollArea::corner {
+    background: transparent;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #444444;
+    min-height: 24px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #555555;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+    background: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #444444;
+    min-width: 24px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #555555;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
+"""
 
 
 class SyncWorker(QThread):
@@ -52,29 +298,30 @@ class DropAreaLabel(QLabel):
 
     def __init__(self):
         super().__init__("📂 ここに作業フォルダ（.dng と .ORF が入ったフォルダ）をドラッグ＆ドロップ\nまたは下の「フォルダ選択」ボタンから指定してください")
+        self.setObjectName("dropArea")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setAcceptDrops(True)
         self.setMinimumHeight(110)
-        self.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #666;
-                border-radius: 8px;
-                background-color: #252526;
-                color: #ddd;
-                font-size: 13px;
-                padding: 16px;
-            }
-            QLabel:hover {
-                border-color: #007acc;
-                background-color: #2d2d30;
-            }
-        """)
+        self.setProperty("dragOver", False)
+
+    def _set_drag_over(self, active: bool):
+        if self.property("dragOver") != active:
+            self.setProperty("dragOver", active)
+            self.style().unpolish(self)
+            self.style().polish(self)
+            self.update()
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
+            self._set_drag_over(True)
             event.acceptProposedAction()
 
+    def dragLeaveEvent(self, event: QDragLeaveEvent):
+        self._set_drag_over(False)
+        super().dragLeaveEvent(event)
+
     def dropEvent(self, event: QDropEvent):
+        self._set_drag_over(False)
         urls = event.mimeData().urls()
         if not urls:
             return
@@ -83,7 +330,6 @@ class DropAreaLabel(QLabel):
             local_path = local_path.parent
         if local_path.is_dir():
             self.folder_dropped.emit(local_path)
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -95,7 +341,8 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         # 1. ドロップエリア
         self.drop_label = DropAreaLabel()
@@ -104,6 +351,7 @@ class MainWindow(QMainWindow):
 
         # 2. フォルダパス選択行
         path_layout = QHBoxLayout()
+        path_layout.setSpacing(8)
         self.path_edit = QLineEdit()
         self.path_edit.setPlaceholderText("作業フォルダのパス...")
         btn_browse = QPushButton("フォルダ選択...")
@@ -116,6 +364,8 @@ class MainWindow(QMainWindow):
         # 3. オプション設定グループ
         opt_group = QGroupBox("引き継ぎ・安全設定")
         opt_layout = QVBoxLayout(opt_group)
+        opt_layout.setContentsMargins(6, 8, 6, 6)
+        opt_layout.setSpacing(8)
 
         self.chk_aspect = QCheckBox("画角の自動補正を行う（カメラ内 3:2 / 16:9 / 1:1 / 縦位置 を判別してRAWへ再現）【推奨】")
         self.chk_aspect.setChecked(True)
@@ -133,13 +383,14 @@ class MainWindow(QMainWindow):
 
         # 4. 実行・中断ボタンとプログレスバー
         action_layout = QHBoxLayout()
+        action_layout.setSpacing(10)
         self.btn_run = QPushButton("▶ XMP抽出＆RAW引き継ぎを実行")
-        self.btn_run.setMinimumHeight(40)
-        self.btn_run.setStyleSheet("font-weight: bold; font-size: 14px; background-color: #0e639c; color: white;")
+        self.btn_run.setObjectName("primaryButton")
+        self.btn_run.setMinimumHeight(44)
         self.btn_run.clicked.connect(self.start_process)
 
         self.btn_cancel = QPushButton("■ 中断")
-        self.btn_cancel.setMinimumHeight(40)
+        self.btn_cancel.setMinimumHeight(44)
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self.cancel_process)
 
@@ -149,7 +400,9 @@ class MainWindow(QMainWindow):
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
         self.status_label = QLabel("待機中")
+        self.status_label.setObjectName("statusLabel")
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.status_label)
 
@@ -229,6 +482,8 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setFont(QFont("Yu Gothic UI", 10))
+    app.setStyleSheet(DARK_QSS)
     win = MainWindow()
     win.show()
     sys.exit(app.exec())
