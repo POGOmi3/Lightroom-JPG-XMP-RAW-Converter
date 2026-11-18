@@ -56,6 +56,16 @@ DNG から編集情報（XMP）を抽出し、RAW 用に書き換えて同名の
 - ExifTool（`exiftool.exe` と `exiftool_files` フォルダを
   アプリと同じ階層に配置。リポジトリには含めていません）
 
+## Windows 向けビルド
+
+GitHub Actions で自動ビルドします（`.github/workflows/build.yml`）。
+
+- 手動実行: リポジトリの Actions タブから「Build Windows exe」を Run
+- または `v*` タグを push
+- 成果物 `LightroomJpgRawBridge-windows`（フォルダ形式の zip）を
+  ダウンロードし、解凍して中の `LightroomJpgRawBridge.exe` を実行
+- ExifTool はビルド時に自動で同梱されます（別途用意は不要です）
+
 ## 開発体制
 
 - 実装: Gemini Carbon
@@ -64,6 +74,5 @@ DNG から編集情報（XMP）を抽出し、RAW 用に書き換えて同名の
 
 ## 未確認事項
 
-- 縦位置写真で Crop 座標軸が表示基準かセンサー基準かは、
-  実物の縦位置 DNG＋ORF での Lightroom 読み込み確認が別途必要です
-  （`docs/VERIFICATION_2026-11-18.md` 参照）
+- 縦位置写真の Crop 座標軸は、実物検証によりセンサー（格納）基準で
+  確定し、コードへ反映済みです（`docs/VERIFICATION_2026-11-18.md` 参照）
