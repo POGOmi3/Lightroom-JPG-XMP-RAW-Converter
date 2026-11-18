@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+tests/_tmp/
+exiftool.exe
+exiftool_files/
+__temp_*.xmp
+*.xmp.bak_*
+dist/
+build/
+*.spec
