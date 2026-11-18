@@ -27,7 +27,7 @@ jobs:
         run: |
           $ver = (Invoke-WebRequest -Uri "https://exiftool.org/ver.txt" -UseBasicParsing).Content.Trim()
           Write-Host "ExifTool version: $ver"
-          Invoke-WebRequest -Uri "https://sourceforge.net/projects/exiftool/files/exiftool-$($ver)_64.zip/download" -OutFile exiftool.zip
+          Invoke-WebRequest -Uri "https://downloads.sourceforge.net/project/exiftool/exiftool-$($ver)_64.zip" -OutFile exiftool.zip
           Expand-Archive exiftool.zip -DestinationPath exiftool_pkg
           $src = Get-ChildItem exiftool_pkg -Directory | Select-Object -First 1
           New-Item -ItemType Directory -Force -Path exiftool | Out-Null
