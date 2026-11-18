@@ -1,0 +1,45 @@
+name: Build Windows exe
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pyinstaller>=6.10,<7"
+
+      - name: Download ExifTool (Windows 64-bit)
+        shell: pwsh
+        run: |
+          $ver = (Invoke-WebRequest -Uri "https://exiftool.org/ver.txt" -UseBasicParsing).Content.Trim()
+          Write-Host "ExifTool version: $ver"
+          Invoke-WebRequest -Uri "https://exiftool.org/exiftool-$($ver)_64.zip" -OutFile exiftool.zip
+          Expand-Archive exiftool.zip -DestinationPath exiftool_pkg
+          $src = Get-ChildItem exiftool_pkg -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path exiftool | Out-Null
+          Copy-Item (Join-Path $src.FullName "exiftool(-k).exe") (Join-Path "exiftool" "exiftool.exe")
+          Copy-Item (Join-Path $src.FullName "exiftool_files") (Join-Path "exiftool" "exiftool_files") -Recurse
+          & .\exiftool\exiftool.exe -ver
+
+      - name: Build with PyInstaller
+        run: pyinstaller --noconfirm build.spec
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: LightroomJpgRawBridge-windows
+          path: dist/LightroomJpgRawBridge
